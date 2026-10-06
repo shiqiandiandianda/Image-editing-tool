@@ -10,8 +10,8 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 from frame_repair.adapters import DeterministicTestAdapter, UnconfiguredCodexAdapter
 from frame_repair.errors import (
     AdapterUnavailable,
-    BackendError,
     ArtifactError,
+    BackendError,
     ConflictError,
     IdempotencyConflict,
     ValidationError,
@@ -131,7 +131,7 @@ class CoreTests(unittest.TestCase):
             barrier = Barrier(2)
             outcomes = []
 
-            def accept(job_id):
+            def accept(job_id, *, barrier=barrier, store=store, base=base, outcomes=outcomes):
                 barrier.wait(timeout=2)
                 try:
                     version = store.accept(
@@ -176,11 +176,11 @@ class CoreTests(unittest.TestCase):
             barrier = Barrier(2)
             outcome = {}
 
-            def dispatch():
+            def dispatch(*, barrier=barrier, outcome=outcome, manager=manager):
                 barrier.wait(timeout=2)
                 outcome["run"] = manager.run_next()
 
-            def cancel():
+            def cancel(*, barrier=barrier, outcome=outcome, manager=manager, job=job):
                 barrier.wait(timeout=2)
                 try:
                     result = manager.cancel(job.job_id)
