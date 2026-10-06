@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from threading import Lock
 
 from .adapters import GeneratedArtifact, ImageEditorAdapter
@@ -14,7 +14,7 @@ from .raster import Raster, outside_pixels_equal
 from .versions import ImageVersion, VersionStore
 
 
-class JobStatus(str, Enum):
+class JobStatus(StrEnum):
     QUEUED = "queued"
     RUNNING = "running"
     PREVIEW_READY = "preview_ready"

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 from .errors import ValidationError
 
@@ -42,7 +42,7 @@ class Rect:
         return self.right <= size.width and self.bottom <= size.height
 
 
-class AspectRatio(str, Enum):
+class AspectRatio(StrEnum):
     SQUARE = "1:1"
     LANDSCAPE = "16:9"
     PORTRAIT = "9:16"
