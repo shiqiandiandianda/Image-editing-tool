@@ -1,11 +1,15 @@
-# Development log
+# �������̼�¼
 
 ## 2026-10-06
 
-- Repository: shiqiandiandianda/Image-editing-tool
-- Branch: dev
-- Phase: backend foundation
-- Product constraints: target ratios 1:1, 16:9, 9:16; context expansion switch defaults off; worker concurrency defaults to 1; saved base version is the writeback baseline.
-- Implemented: typed geometry models, exact ratio validation, optional clipped context expansion, target-only compositing, outside-pixel preservation test, replaceable image-edit adapter boundary, FastAPI health and geometry validation endpoints.
-- Intentionally unimplemented: native Codex image editing, provider/auth verification, persistence, binary artifact storage, full task lifecycle, frontend, and main-branch promotion.
-- Verification: tests are authored but execution depends on a checked-out environment with Python dependencies. Do not treat commit presence as test success.
+- Ŀ��ֿ⣺`shiqiandiandianda/Image-editing-tool`��
+- GitHub ״̬���ֿ�ɷ��ʣ���ǰ `main` ֻ�г�ʼ README �ύ���ѽ���Զ�� `dev` ��֧��δ��������������֧��������
+- ����״̬���ֿ��Ѽ��������Ŀ¼���������Ƶ��� `.git` ����Ŀ¼����д�������ύʹ�� GitHub API �����ύ��ʷ��
+- �������ݣ��ɹ���ȡ Google Drive �������� v0.2���ļ� ID `1GUFt6ulxzqOWoAH6lFpV1JlkGB260nFK`����������ȷ�������ֱ�����Ĭ�Ϲر����ߡ�����Ĭ�� 1����ʽ����ǰ���ĺͰ汾��ͻ��顣
+- Context7����ǰִ�л���û�пɵ��õ� Context7 ���ߣ����û������ʹ�� Context7������ API �Է������г��Ĺٷ��ĵ��ʹ�����ԼΪ���ݣ����ֿ������������ú��ٺ˶Ե�ǰ�汾��
+- ʵ�֣����ȷ���Ժ�˺��ġ���ʽδ���� Codex ���������������������ܹ��ĵ�������ȱ�ڼ�¼��
+- ���ԣ�`python -m unittest discover -s backend/tests -v` Ӧ���޵����������������У�Ruff/mypy/pytest/FastAPI/Pillow δִ�л򲻿��ã�������ӱ��档
+
+## ���Ӹ����Ի�
+
+������ʵ Codex ����ǰ�˶� `UnconfiguredCodexAdapter` ���滻��Լ����ʵ������֤���衣ֻ�еõ�ʵ�������ļ������� operation/thread������ʱ�汾����֤/���֤�ݺ󣬲��ܰ�����״̬�� mock ��֤�ƽ�����ʵ��·��

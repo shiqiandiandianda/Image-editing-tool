@@ -1,28 +1,30 @@
 # Image-editing-tool
 
-## Goal
+## Ŀ��
 
-Provide a safe local workflow for repairing a selected region of a comic image and producing a reviewable output.
+Ϊ�ֲ�ͼƬ�����ṩ�����ġ��ɻ��˵ĺ�˱ջ���������ʽ��ͼ��У��Ŀ���������������������Ĳο���ͼ������һ��ͼ��༭������ϳ�ԭλԤ���������˹����ܺ󱣴��°汾��
 
-## Implemented
+## ��ʵ�ֹ���
 
-- Backend foundation for rectangle geometry and exact target-ratio validation
-- Optional context expansion, disabled by default
-- Target-only preview compositing with outside-pixel preservation
-- Replaceable image-edit adapter boundary
-- FastAPI health and geometry validation endpoints
+- Ŀ������ `1:1`��`16:9`��`9:16` ����������У�飻����������ܾ���
+- �������������ã�Ĭ�Ϲرգ�����ֻӰ��ģ�Ͳο���ͼ��д�ط�Χ����ԭĿ���
+- �����ͼ�汾�����ع�ϣ��ԭͼ����ֻ��������ǰ�����汾��ͻ��顣
+- �־û�ģ�����������״̬���ݵȼ��������ϣ�����У�顢Ԥ�������ܡ��ܾ���ȡ�����塣
+- �װ洮����������������������Ĭ�� 1������滻ͼ��༭��������δ������ʵ Codex ʱ��ȷ����������
+- ȷ���Բ��С��ȱ������š�Ŀ���ϳɺͿ������ز���У�顣
 
-## Deploy
+## ���𷽷�
 
-Install the project and development extras, then run:
+��Ҫ Python 3.11+�������ڿ�ֱ�����б�׼����ԣ�
 
-    python -m pip install -e '.[dev]'
-    uvicorn backend.app.main:app --reload
+```powershell
+python -m unittest discover -s backend/tests -v
+```
 
-## References
+��ʵͼƬ������ API ����ʱ������ `backend/pyproject.toml` ��������Codex ԭ������ʱ����֤��ר�� RPC ��δ�ڱ��ֿ������á����Ȱ�װ�������������ٰ� `docs/development-log.md` ����֤�����������á�
 
-- OpenAI Codex image-generation interfaces, used as an adapter boundary only
-- Pillow for deterministic image operations
-- FastAPI and Pydantic for the local service foundation
+## ��л��ο���Ŀ
 
-The native Codex image-edit path and production persistence are not included in this foundation release.
+- OpenAI Codex��ͼ��༭������ app-server Э����о��ο���
+- Pillow���ƻ���������ͼƬ���������š�
+- FastAPI���ƻ����� HTTP API ���������ڹ�����
