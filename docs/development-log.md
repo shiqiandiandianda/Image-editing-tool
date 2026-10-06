@@ -14,3 +14,5 @@
 ## 交接给主对话
 
 请在真实 Codex 接入前核对 `UnconfiguredCodexAdapter` 的替换契约和真实能力验证步骤。只有得到实际生成文件、关联 operation/thread、运行时版本和认证/额度证据后，才能把任务状态从 mock 验证推进到真实链路。
+
+- 最新 Context7 连接查询结果（父线程确认）：Context7 插件查询不需要仓库 API key；本次未读取、输出或提交任何 key。.env.example 与 .gitignore 已分别在提交 dded96b1、217f9723 记录说明；本地 .env 不是本次查询前置，也未在本条记录中写入秘密。
