@@ -66,6 +66,7 @@ class JobManager:
         self.max_concurrency = max_concurrency
         self._jobs: dict[str, Job] = {}
         self._by_idempotency: dict[str, str] = {}
+        self._active_job_id: str | None = None
         self._lock = Lock()
 
     def submit(
@@ -125,22 +126,25 @@ class JobManager:
         return self._jobs[job_id]
 
     def cancel(self, job_id: str) -> Job:
-        job = self.get(job_id)
-        if job.status == JobStatus.QUEUED:
-            job.status = JobStatus.CANCELLED
-        elif job.status in (
-            JobStatus.PREVIEW_READY,
-            JobStatus.REJECTED,
-            JobStatus.ACCEPTED,
-            JobStatus.CANCELLED,
-        ):
+        with self._lock:
+            job = self._jobs[job_id]
+            if job.status == JobStatus.QUEUED:
+                job.status = JobStatus.CANCELLED
+            elif job.status in (
+                JobStatus.PREVIEW_READY,
+                JobStatus.REJECTED,
+                JobStatus.ACCEPTED,
+                JobStatus.CANCELLED,
+            ):
+                return job
+            else:
+                raise BackendError("running cancellation requires an adapter-specific operation")
             return job
-        else:
-            raise BackendError("running cancellation requires an adapter-specific operation")
-        return job
 
     def run_next(self) -> Job | None:
         with self._lock:
+            if self._active_job_id is not None:
+                return None
             queued = next(
                 (job for job in self._jobs.values() if job.status == JobStatus.QUEUED),
                 None,
@@ -149,6 +153,7 @@ class JobManager:
                 return None
             queued.status = JobStatus.RUNNING
             queued.attempts += 1
+            self._active_job_id = queued.job_id
         try:
             base = self.versions.get(queued.base_version_id)
             reference = base.raster.crop(queued.context)
@@ -171,35 +176,47 @@ class JobManager:
             preview = base.raster.paste(target_patch, queued.target)
             if not outside_pixels_equal(base.raster, preview, queued.target):
                 raise ValidationError("preview changed pixels outside the target rectangle")
-            queued.artifact = artifact
-            queued.preview = preview
-            queued.status = JobStatus.PREVIEW_READY
+            with self._lock:
+                queued.artifact = artifact
+                queued.preview = preview
+                queued.status = JobStatus.PREVIEW_READY
         except BackendError as exc:
-            queued.status = JobStatus.FAILED
-            queued.error_code, queued.error_message = exc.code, str(exc)
+            with self._lock:
+                queued.status = JobStatus.FAILED
+                queued.error_code, queued.error_message = exc.code, str(exc)
         except Exception as exc:
-            queued.status = JobStatus.FAILED
-            queued.error_code, queued.error_message = "UNEXPECTED_ERROR", str(exc)
+            with self._lock:
+                queued.status = JobStatus.FAILED
+                queued.error_code, queued.error_message = "UNEXPECTED_ERROR", str(exc)
+        finally:
+            with self._lock:
+                self._active_job_id = None
         return queued
 
     def reject(self, job_id: str) -> Job:
-        job = self.get(job_id)
-        if job.status != JobStatus.PREVIEW_READY:
-            raise ValidationError("only a preview can be rejected")
-        job.status = JobStatus.REJECTED
-        return job
+        with self._lock:
+            job = self._jobs[job_id]
+            if job.status != JobStatus.PREVIEW_READY:
+                raise ValidationError("only a preview can be rejected")
+            job.status = JobStatus.REJECTED
+            return job
 
     def accept(self, job_id: str) -> ImageVersion:
-        job = self.get(job_id)
-        if job.status != JobStatus.PREVIEW_READY or job.preview is None:
-            raise ValidationError("only a ready preview can be accepted")
-        try:
-            version = self.versions.accept(job.preview, base_version_id=job.base_version_id,
-                                           base_hash=job.base_hash, job_id=job.job_id)
-        except ConflictError as exc:
-            job.status = JobStatus.CONFLICT
-            job.error_code, job.error_message = exc.code, str(exc)
-            raise
-        job.accepted_version_id = version.version_id
-        job.status = JobStatus.ACCEPTED
-        return version
+        with self._lock:
+            job = self._jobs[job_id]
+            if job.status != JobStatus.PREVIEW_READY or job.preview is None:
+                raise ValidationError("only a ready preview can be accepted")
+            try:
+                version = self.versions.accept(
+                    job.preview,
+                    base_version_id=job.base_version_id,
+                    base_hash=job.base_hash,
+                    job_id=job.job_id,
+                )
+            except ConflictError as exc:
+                job.status = JobStatus.CONFLICT
+                job.error_code, job.error_message = exc.code, str(exc)
+                raise
+            job.accepted_version_id = version.version_id
+            job.status = JobStatus.ACCEPTED
+            return version

@@ -3,12 +3,14 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from threading import Barrier, Thread
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
 from frame_repair.adapters import DeterministicTestAdapter, UnconfiguredCodexAdapter
 from frame_repair.errors import (
     AdapterUnavailable,
+    BackendError,
     ArtifactError,
     ConflictError,
     IdempotencyConflict,
@@ -121,6 +123,84 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(job.status, JobStatus.FAILED)
         self.assertEqual(job.error_code, ArtifactError.code)
         self.assertIsNone(job.preview)
+
+    def test_version_accept_is_atomic_compare_and_swap(self):
+        for attempt in range(20):
+            store = VersionStore(self.raster())
+            base = store.current
+            barrier = Barrier(2)
+            outcomes = []
+
+            def accept(job_id):
+                barrier.wait(timeout=2)
+                try:
+                    version = store.accept(
+                        self.raster(),
+                        base_version_id=base.version_id,
+                        base_hash=base.content_hash,
+                        job_id=job_id,
+                    )
+                except ConflictError:
+                    outcomes.append(("conflict", job_id))
+                except Exception as exc:  # pragma: no cover - keeps thread failures visible
+                    outcomes.append(("error", type(exc).__name__))
+                else:
+                    outcomes.append(("accepted", version.version_id))
+
+            threads = [
+                Thread(target=accept, args=(f"job-{attempt}-a",)),
+                Thread(target=accept, args=(f"job-{attempt}-b",)),
+            ]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=2)
+                self.assertFalse(thread.is_alive())
+            self.assertEqual(sorted(kind for kind, _ in outcomes), ["accepted", "conflict"])
+            accepted_id = next(value for kind, value in outcomes if kind == "accepted")
+            self.assertEqual(store.current.version_id, accepted_id)
+            self.assertEqual(len(store._versions), 2)
+
+    def test_cancel_race_with_dispatch_never_runs_a_cancelled_job(self):
+        for attempt in range(40):
+            adapter = DeterministicTestAdapter()
+            manager = self.manager(adapter)
+            job = manager.submit(
+                job_id=f"cancel-race-{attempt}",
+                idempotency_key=f"cancel-race-{attempt}",
+                ratio=AspectRatio.SQUARE,
+                target=Rect(2, 2, 4, 4),
+                instruction="repair",
+                preserve="line",
+            )
+            barrier = Barrier(2)
+            outcome = {}
+
+            def dispatch():
+                barrier.wait(timeout=2)
+                outcome["run"] = manager.run_next()
+
+            def cancel():
+                barrier.wait(timeout=2)
+                try:
+                    result = manager.cancel(job.job_id)
+                except BackendError as exc:
+                    outcome["cancel_error"] = exc
+                else:
+                    outcome["cancel_status"] = result.status
+
+            threads = [Thread(target=dispatch), Thread(target=cancel)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=2)
+                self.assertFalse(thread.is_alive())
+            if outcome.get("cancel_status") == JobStatus.CANCELLED:
+                self.assertEqual(adapter.calls, 0)
+                self.assertEqual(job.status, JobStatus.CANCELLED)
+            else:
+                self.assertEqual(adapter.calls, 1)
+                self.assertNotEqual(job.status, JobStatus.CANCELLED)
 
     def test_accept_detects_changed_formal_base(self):
         manager = self.manager()
