@@ -116,9 +116,13 @@ class JobManager:
             base = self.versions.get(queued.base_version_id)
             reference = base.raster.crop(queued.context)
             artifact = self.adapter.edit(reference, queued.instruction, job_id=queued.job_id)
-            validate_generated_artifact(artifact, queued.target, queued.ratio)
-            patch = artifact.raster.resize_nearest(queued.target.width, queued.target.height)
-            preview = base.raster.paste(patch, queued.target)
+            validate_generated_artifact(artifact, queued.context)
+            context_patch = artifact.raster.resize_nearest(queued.context.width, queued.context.height)
+            target_patch = context_patch.crop(
+                Rect(queued.target.x - queued.context.x, queued.target.y - queued.context.y,
+                     queued.target.width, queued.target.height)
+            )
+            preview = base.raster.paste(target_patch, queued.target)
             if not outside_pixels_equal(base.raster, preview, queued.target):
                 raise ValidationError("preview changed pixels outside the target rectangle")
             queued.artifact = artifact

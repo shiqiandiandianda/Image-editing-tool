@@ -52,12 +52,12 @@ class CoreTests(unittest.TestCase):
             manager.submit(**{**kwargs, "job_id": "j2", "instruction": "different"})
 
     def test_serial_run_preview_accept_keeps_outside_pixels(self):
-        adapter = DeterministicTestAdapter(lambda raster: raster.resize_nearest(8, 8))
+        adapter = DeterministicTestAdapter(lambda raster: raster.resize_nearest(11, 11))
         manager = self.manager(adapter)
         job = manager.submit(job_id="j1", idempotency_key="k1", ratio=AspectRatio.SQUARE,
-                             target=Rect(2, 2, 4, 4), context_margin=2, context_enabled=True,
+                             target=Rect(2, 2, 4, 4), context_margin=5, context_enabled=True,
                              instruction="repair", preserve="background")
-        self.assertEqual(job.context, Rect(0, 0, 8, 8))
+        self.assertEqual(job.context, Rect(0, 0, 11, 11))
         self.assertIs(manager.run_next(), job)
         self.assertEqual(job.status, JobStatus.PREVIEW_READY)
         self.assertTrue(outside_pixels_equal(manager.versions.current.raster, job.preview, job.target))
