@@ -22,6 +22,7 @@ class JobStatus(StrEnum):
     REJECTED = "rejected"
     CANCELLED = "cancelled"
     FAILED = "failed"
+    INTERRUPTED = "interrupted"
     CONFLICT = "version_conflict"
 
 
@@ -135,6 +136,8 @@ class JobManager:
                 JobStatus.REJECTED,
                 JobStatus.ACCEPTED,
                 JobStatus.CANCELLED,
+                JobStatus.FAILED,
+                JobStatus.INTERRUPTED,
             ):
                 return job
             else:
@@ -188,6 +191,12 @@ class JobManager:
             with self._lock:
                 queued.status = JobStatus.FAILED
                 queued.error_code, queued.error_message = "UNEXPECTED_ERROR", str(exc)
+        except BaseException as exc:
+            with self._lock:
+                queued.status = JobStatus.INTERRUPTED
+                queued.error_code = "INTERRUPTED"
+                queued.error_message = str(exc) or type(exc).__name__
+            raise
         finally:
             with self._lock:
                 self._active_job_id = None
