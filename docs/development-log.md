@@ -21,6 +21,7 @@
 ## P1 review follow-up
 
 - Fixed in the current dev change: VersionStore acceptance now performs base comparison, immutable-version insertion, and current-pointer update under one lock; queued cancellation and worker dispatch use the same JobManager lock, and the serial worker reserves one active job until completion.
+- The worker now records an explicit `interrupted` terminal state for `BaseException` interruptions, preserves the reservation until that state is recorded, and then releases the serial worker slot so queued work can recover deterministically.
 - The review's persistence hardening items (rejecting idempotency-key collisions and preserving existing version rows) remain outside this focused P1 change and are tracked for a separate migration-safe change.
 
 ## Deferred P2 review items

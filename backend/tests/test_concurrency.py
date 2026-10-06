@@ -193,6 +193,93 @@ class ConcurrencyTests(unittest.TestCase):
         self.assertEqual(adapter.calls, 2)
         self.assertEqual(second_job.status, JobStatus.PREVIEW_READY)
 
+    def test_keyboard_interrupt_marks_job_before_releasing_worker_slot(self):
+        entered = Event()
+        release = Event()
+        calls = 0
+
+        def interrupted_edit(reference):
+            nonlocal calls
+            calls += 1
+            entered.set()
+            if calls == 1:
+                if not release.wait(5):
+                    raise TimeoutError("adapter release was not signalled")
+                raise KeyboardInterrupt("worker interrupted")
+            return reference
+
+        adapter = DeterministicTestAdapter(interrupted_edit)
+        manager = self.manager(adapter)
+        first_job = self.submit(manager, "interrupted")
+        second_job = self.submit(manager, "queued")
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(manager.run_next)
+            try:
+                self.assertTrue(entered.wait(5))
+                second = pool.submit(manager.run_next)
+                self.assertIsNone(second.result(timeout=5))
+                self.assertEqual(first_job.status, JobStatus.RUNNING)
+                self.assertEqual(second_job.status, JobStatus.QUEUED)
+            finally:
+                release.set()
+            with self.assertRaises(KeyboardInterrupt):
+                first.result(timeout=5)
+
+        self.assertEqual(first_job.status, JobStatus.INTERRUPTED)
+        self.assertEqual(first_job.error_code, "INTERRUPTED")
+        self.assertEqual(first_job.error_message, "worker interrupted")
+        self.assertIsNone(manager._active_job_id)
+        self.assertIs(manager.run_next(), second_job)
+        self.assertEqual(second_job.status, JobStatus.PREVIEW_READY)
+
+    def test_system_exit_marks_job_and_releases_slot_after_state_update(self):
+        calls = 0
+
+        def exit_once(reference):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise SystemExit("worker stopped")
+            return reference
+
+        adapter = DeterministicTestAdapter(exit_once)
+        manager = self.manager(adapter)
+        first_job = self.submit(manager, "exited")
+        second_job = self.submit(manager, "after-exit")
+
+        with self.assertRaises(SystemExit):
+            manager.run_next()
+
+        self.assertEqual(first_job.status, JobStatus.INTERRUPTED)
+        self.assertEqual(first_job.error_code, "INTERRUPTED")
+        self.assertEqual(first_job.error_message, "worker stopped")
+        self.assertIsNone(manager._active_job_id)
+        self.assertIs(manager.run_next(), second_job)
+        self.assertEqual(second_job.status, JobStatus.PREVIEW_READY)
+
+    def test_unexpected_exception_marks_job_failed_before_releasing_slot(self):
+        calls = 0
+
+        def failed_edit(reference):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise RuntimeError("adapter failed")
+            return reference
+
+        adapter = DeterministicTestAdapter(failed_edit)
+        manager = self.manager(adapter)
+        first_job = self.submit(manager, "failed")
+        second_job = self.submit(manager, "after-failure")
+
+        self.assertIs(manager.run_next(), first_job)
+        self.assertEqual(first_job.status, JobStatus.FAILED)
+        self.assertEqual(first_job.error_code, "UNEXPECTED_ERROR")
+        self.assertEqual(first_job.error_message, "adapter failed")
+        self.assertIsNone(manager._active_job_id)
+        self.assertIs(manager.run_next(), second_job)
+        self.assertEqual(second_job.status, JobStatus.PREVIEW_READY)
+
 
 if __name__ == "__main__":
     unittest.main()
