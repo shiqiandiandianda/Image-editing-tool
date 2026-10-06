@@ -14,10 +14,23 @@ def health() -> dict[str, str]:
 
 
 @app.post("/geometry/validate")
-def validate_geometry(target: Rect, ratio: AspectRatio, image_width: int, image_height: int,
-                      expand_context: bool = False, expansion_pixels: int = 0) -> dict[str, object]:
+def validate_geometry(
+    target: Rect,
+    ratio: AspectRatio,
+    image_width: int,
+    image_height: int,
+    expand_context: bool = False,
+    expansion_pixels: int = 0,
+) -> dict[str, object]:
     try:
-        plan = build_crop_plan(target, ratio, image_width, image_height, expand_context, expansion_pixels)
+        plan = build_crop_plan(
+            target,
+            ratio,
+            image_width,
+            image_height,
+            expand_context,
+            expansion_pixels,
+        )
     except GeometryError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {"target": plan.target.model_dump(), "context": plan.context.model_dump()}

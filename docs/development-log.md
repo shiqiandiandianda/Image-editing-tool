@@ -9,6 +9,7 @@
 - Context7：已检查当前可用工具目录，没有注册 Context7 MCP/connector，因此无法发起真实 Context7 查询；本记录不声称使用过 Context7。按项目要求采用官方文档作为明确 fallback：FastAPI `lifespan`（https://fastapi.tiangolo.com/advanced/events/）、Pillow `Image.crop`/`resize`/`paste`（https://pillow.readthedocs.io/en/stable/reference/Image.html）、Pydantic v2 models（https://docs.pydantic.dev/latest/concepts/models/）。这些链接不是 Context7 查询结果；依赖版本以仓库锁定配置和 CI 实际安装为准。
 - 实现：完成确定性后端核心、上下文到目标框映射、SQLite 元数据存储、显式未配置 Codex 适配器、FastAPI 兼容层、测试适配器、架构文档和验收缺口记录。
 - 测试：`python -m unittest discover -s backend/tests -v`：10 passed；`python -m compileall`：通过。Ruff/pytest/FastAPI/Pillow 在当前执行机未成功安装（pip 索引/受管 Python 权限阻塞），因此 CI 仍需执行真实依赖验证。
+- CI 反馈：远程 run `37496144843` 在 Ruff 阶段失败、测试被跳过；失败项包括 40 个 E501/UP037/I001/F401。已按 Ruff 0.16.10 的实际日志修复所有报告项（短行、导入排序、前向类型注解和未使用导入）。远程安装阶段实际解析到 FastAPI 0.142.2、Pillow 12.3.0、Pydantic 2.13.5、pytest 8.4.2、Ruff 0.16.10；这些是 CI 安装日志的版本证据，不是 Context7 查询结果。
 
 ## 交接给主对话
 

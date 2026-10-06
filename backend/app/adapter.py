@@ -12,4 +12,6 @@ class ImageEditAdapter(Protocol):
 @dataclass(frozen=True)
 class UnconfiguredImageEditAdapter:
     def edit(self, image, instruction: str):
-        raise RuntimeError("no image-edit provider is configured; native Codex capability is not verified")
+        raise RuntimeError(
+            "no image-edit provider is configured; native Codex capability is not verified"
+        )

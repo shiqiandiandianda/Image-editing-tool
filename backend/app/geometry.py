@@ -22,10 +22,20 @@ def validate_target(rect: Rect, ratio: AspectRatio, image_width: int, image_heig
         raise GeometryError(f"target rectangle must match ratio {ratio.value}")
 
 
-def build_crop_plan(target: Rect, ratio: AspectRatio, image_width: int, image_height: int,
-                    expand_context: bool = False, expansion_pixels: int = 0) -> CropPlan:
+def build_crop_plan(
+    target: Rect,
+    ratio: AspectRatio,
+    image_width: int,
+    image_height: int,
+    expand_context: bool = False,
+    expansion_pixels: int = 0,
+) -> CropPlan:
     validate_target(target, ratio, image_width, image_height)
-    context = target.expand(expansion_pixels, image_width, image_height) if expand_context else target
+    context = (
+        target.expand(expansion_pixels, image_width, image_height)
+        if expand_context
+        else target
+    )
     return CropPlan(target=target, context=context)
 
 

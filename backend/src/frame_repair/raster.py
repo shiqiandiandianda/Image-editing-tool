@@ -28,11 +28,11 @@ class Raster:
                 raise ValidationError("pixels must be 8-bit RGB or RGBA tuples")
 
     @classmethod
-    def solid(cls, width: int, height: int, color: Pixel = (0, 0, 0)) -> "Raster":
+    def solid(cls, width: int, height: int, color: Pixel = (0, 0, 0)) -> Raster:
         return cls(width, height, len(color), tuple(color for _ in range(width * height)))
 
     @classmethod
-    def from_rows(cls, rows: list[list[Pixel]]) -> "Raster":
+    def from_rows(cls, rows: list[list[Pixel]]) -> Raster:
         if not rows or not rows[0]:
             raise ValidationError("raster rows cannot be empty")
         width = len(rows[0])
@@ -59,26 +59,36 @@ class Raster:
     def at(self, x: int, y: int) -> Pixel:
         return self._pixels[y * self.width + x]
 
-    def crop(self, rect: Rect) -> "Raster":
+    def crop(self, rect: Rect) -> Raster:
         if not rect.within(self.size):
             raise ValidationError("crop rectangle is outside raster")
-        return Raster.from_rows([[self.at(x, y) for x in range(rect.x, rect.right)] for y in range(rect.y, rect.bottom)])
+        rows = [
+            [self.at(x, y) for x in range(rect.x, rect.right)]
+            for y in range(rect.y, rect.bottom)
+        ]
+        return Raster.from_rows(rows)
 
-    def resize_nearest(self, width: int, height: int) -> "Raster":
+    def resize_nearest(self, width: int, height: int) -> Raster:
         if width <= 0 or height <= 0:
             raise ValidationError("resize dimensions must be positive")
         rows = []
         for y in range(height):
             source_y = min(self.height - 1, y * self.height // height)
-            rows.append([self.at(min(self.width - 1, x * self.width // width), source_y) for x in range(width)])
+            rows.append([
+                self.at(min(self.width - 1, x * self.width // width), source_y)
+                for x in range(width)
+            ])
         return Raster.from_rows(rows)
 
-    def paste(self, patch: "Raster", target: Rect) -> "Raster":
+    def paste(self, patch: Raster, target: Rect) -> Raster:
         if target.width != patch.width or target.height != patch.height:
             raise ValidationError("patch dimensions must equal target dimensions before paste")
         if self.channels != patch.channels or not target.within(self.size):
             raise ValidationError("patch mode or target bounds do not match")
-        rows = [list(self._pixels[y * self.width : (y + 1) * self.width]) for y in range(self.height)]
+        rows = [
+            list(self._pixels[y * self.width : (y + 1) * self.width])
+            for y in range(self.height)
+        ]
         for py in range(patch.height):
             for px in range(patch.width):
                 rows[target.y + py][target.x + px] = patch.at(px, py)
@@ -86,7 +96,11 @@ class Raster:
 
 
 def outside_pixels_equal(before: Raster, after: Raster, target: Rect) -> bool:
-    if before.width != after.width or before.height != after.height or before.channels != after.channels:
+    if (
+        before.width != after.width
+        or before.height != after.height
+        or before.channels != after.channels
+    ):
         return False
     for y in range(before.height):
         for x in range(before.width):

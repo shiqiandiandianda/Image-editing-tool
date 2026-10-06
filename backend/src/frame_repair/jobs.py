@@ -50,9 +50,17 @@ class Job:
 class JobManager:
     """Serial coordinator whose contracts map directly to a future SQLite worker."""
 
-    def __init__(self, versions: VersionStore, adapter: ImageEditorAdapter, *, max_concurrency: int = 1) -> None:
+    def __init__(
+        self,
+        versions: VersionStore,
+        adapter: ImageEditorAdapter,
+        *,
+        max_concurrency: int = 1,
+    ) -> None:
         if max_concurrency != 1:
-            raise ValidationError("only serial worker mode is verified in the first backend milestone")
+            raise ValidationError(
+                "only serial worker mode is verified in the first backend milestone"
+            )
         self.versions = versions
         self.adapter = adapter
         self.max_concurrency = max_concurrency
@@ -60,9 +68,18 @@ class JobManager:
         self._by_idempotency: dict[str, str] = {}
         self._lock = Lock()
 
-    def submit(self, *, job_id: str, idempotency_key: str, ratio: AspectRatio, target: Rect,
-               context_margin: int = 0, context_enabled: bool = False,
-               instruction: str, preserve: str) -> Job:
+    def submit(
+        self,
+        *,
+        job_id: str,
+        idempotency_key: str,
+        ratio: AspectRatio,
+        target: Rect,
+        context_margin: int = 0,
+        context_enabled: bool = False,
+        instruction: str,
+        preserve: str,
+    ) -> Job:
         if not instruction.strip():
             raise ValidationError("instruction cannot be empty")
         base = self.versions.current
@@ -83,11 +100,23 @@ class JobManager:
             if existing_id is not None:
                 existing = self._jobs[existing_id]
                 if existing.request_hash != request_hash:
-                    raise IdempotencyConflict("idempotency key was already used for a different request")
+                    raise IdempotencyConflict(
+                        "idempotency key was already used for a different request"
+                    )
                 return existing
-            job = Job(job_id, idempotency_key, request_hash, ratio, target, context,
-                      base.version_id, base.content_hash, base.raster.crop(context).sha256,
-                      instruction, preserve)
+            job = Job(
+                job_id,
+                idempotency_key,
+                request_hash,
+                ratio,
+                target,
+                context,
+                base.version_id,
+                base.content_hash,
+                base.raster.crop(context).sha256,
+                instruction,
+                preserve,
+            )
             self._jobs[job_id] = job
             self._by_idempotency[idempotency_key] = job_id
             return job
@@ -99,7 +128,12 @@ class JobManager:
         job = self.get(job_id)
         if job.status == JobStatus.QUEUED:
             job.status = JobStatus.CANCELLED
-        elif job.status in (JobStatus.PREVIEW_READY, JobStatus.REJECTED, JobStatus.ACCEPTED, JobStatus.CANCELLED):
+        elif job.status in (
+            JobStatus.PREVIEW_READY,
+            JobStatus.REJECTED,
+            JobStatus.ACCEPTED,
+            JobStatus.CANCELLED,
+        ):
             return job
         else:
             raise BackendError("running cancellation requires an adapter-specific operation")
@@ -107,7 +141,10 @@ class JobManager:
 
     def run_next(self) -> Job | None:
         with self._lock:
-            queued = next((job for job in self._jobs.values() if job.status == JobStatus.QUEUED), None)
+            queued = next(
+                (job for job in self._jobs.values() if job.status == JobStatus.QUEUED),
+                None,
+            )
             if queued is None:
                 return None
             queued.status = JobStatus.RUNNING
@@ -115,12 +152,21 @@ class JobManager:
         try:
             base = self.versions.get(queued.base_version_id)
             reference = base.raster.crop(queued.context)
-            artifact = self.adapter.edit(reference, queued.instruction, job_id=queued.job_id)
+            artifact = self.adapter.edit(
+                reference, queued.instruction, job_id=queued.job_id
+            )
             validate_generated_artifact(artifact, queued.context)
-            context_patch = artifact.raster.resize_nearest(queued.context.width, queued.context.height)
+            context_patch = artifact.raster.resize_nearest(
+                queued.context.width,
+                queued.context.height,
+            )
             target_patch = context_patch.crop(
-                Rect(queued.target.x - queued.context.x, queued.target.y - queued.context.y,
-                     queued.target.width, queued.target.height)
+                Rect(
+                    queued.target.x - queued.context.x,
+                    queued.target.y - queued.context.y,
+                    queued.target.width,
+                    queued.target.height,
+                )
             )
             preview = base.raster.paste(target_patch, queued.target)
             if not outside_pixels_equal(base.raster, preview, queued.target):

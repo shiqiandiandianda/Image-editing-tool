@@ -29,7 +29,14 @@ class VersionStore:
     def get(self, version_id: str) -> ImageVersion:
         return self._versions[version_id]
 
-    def accept(self, raster: Raster, *, base_version_id: str, base_hash: str, job_id: str) -> ImageVersion:
+    def accept(
+        self,
+        raster: Raster,
+        *,
+        base_version_id: str,
+        base_hash: str,
+        job_id: str,
+    ) -> ImageVersion:
         current = self.current
         if current.version_id != base_version_id or current.content_hash != base_hash:
             raise ConflictError("formal base image changed while the result was under review")

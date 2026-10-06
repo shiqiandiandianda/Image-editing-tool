@@ -11,8 +11,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-from .geometry import Rect
-from .jobs import Job, JobStatus
+from .jobs import Job
 from .raster import Raster
 from .versions import ImageVersion
 
@@ -45,9 +44,11 @@ class SQLiteStateStore:
           raster_json TEXT NOT NULL,
           parent_version_id TEXT REFERENCES image_versions(version_id),
           source_job_id TEXT,
-          is_current INTEGER NOT NULL DEFAULT 0 CHECK (is_current IN (0, 1))
+          is_current INTEGER NOT NULL DEFAULT 0
+            CHECK (is_current IN (0, 1))
         );
-        CREATE UNIQUE INDEX IF NOT EXISTS one_current_version ON image_versions(is_current) WHERE is_current = 1;
+        CREATE UNIQUE INDEX IF NOT EXISTS one_current_version
+          ON image_versions(is_current) WHERE is_current = 1;
         CREATE TABLE IF NOT EXISTS jobs (
           job_id TEXT PRIMARY KEY,
           idempotency_key TEXT NOT NULL UNIQUE,
@@ -64,15 +65,28 @@ class SQLiteStateStore:
     def save_version(self, version: ImageVersion, *, current: bool = False) -> None:
         with self.connection:
             if current:
-                self.connection.execute("UPDATE image_versions SET is_current = 0 WHERE is_current = 1")
+                self.connection.execute(
+                    "UPDATE image_versions SET is_current = 0 WHERE is_current = 1"
+                )
             self.connection.execute(
-                "INSERT OR REPLACE INTO image_versions(version_id, content_hash, raster_json, parent_version_id, source_job_id, is_current) VALUES (?, ?, ?, ?, ?, ?)",
-                (version.version_id, version.content_hash, _raster_payload(version.raster),
-                 version.parent_version_id, version.source_job_id, int(current)),
+                """INSERT OR REPLACE INTO image_versions(
+                    version_id, content_hash, raster_json, parent_version_id,
+                    source_job_id, is_current
+                ) VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    version.version_id,
+                    version.content_hash,
+                    _raster_payload(version.raster),
+                    version.parent_version_id,
+                    version.source_job_id,
+                    int(current),
+                ),
             )
 
     def load_version(self, version_id: str) -> ImageVersion:
-        row = self.connection.execute("SELECT * FROM image_versions WHERE version_id = ?", (version_id,)).fetchone()
+        row = self.connection.execute(
+            "SELECT * FROM image_versions WHERE version_id = ?", (version_id,)
+        ).fetchone()
         if row is None:
             raise KeyError(version_id)
         raster = _raster_from_payload(row["raster_json"])
@@ -80,7 +94,9 @@ class SQLiteStateStore:
                             row["parent_version_id"], row["source_job_id"])
 
     def current_version(self) -> ImageVersion:
-        row = self.connection.execute("SELECT version_id FROM image_versions WHERE is_current = 1").fetchone()
+        row = self.connection.execute(
+            "SELECT version_id FROM image_versions WHERE is_current = 1"
+        ).fetchone()
         if row is None:
             raise KeyError("no current image version")
         return self.load_version(row["version_id"])
@@ -100,13 +116,26 @@ class SQLiteStateStore:
         }
         with self.connection:
             self.connection.execute(
-                "INSERT OR REPLACE INTO jobs(job_id, idempotency_key, request_hash, status, payload_json, error_code, error_message, attempts) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (job.job_id, job.idempotency_key, job.request_hash, job.status.value, json.dumps(payload),
-                 job.error_code, job.error_message, job.attempts),
+                """INSERT OR REPLACE INTO jobs(
+                    job_id, idempotency_key, request_hash, status, payload_json,
+                    error_code, error_message, attempts
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    job.job_id,
+                    job.idempotency_key,
+                    job.request_hash,
+                    job.status.value,
+                    json.dumps(payload),
+                    job.error_code,
+                    job.error_message,
+                    job.attempts,
+                ),
             )
 
     def get_job_record(self, job_id: str) -> dict[str, object]:
-        row = self.connection.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
+        row = self.connection.execute(
+            "SELECT * FROM jobs WHERE job_id = ?", (job_id,)
+        ).fetchone()
         if row is None:
             raise KeyError(job_id)
         return dict(row)
