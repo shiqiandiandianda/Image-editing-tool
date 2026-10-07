@@ -151,7 +151,7 @@ class RepairService:
         with self._lock:
             return [
                 entry.response
-                for entry in self._jobs.values()
+                for entry in reversed(self._jobs.values())
                 if include_rejected or entry.response.review_status != "rejected"
             ]
 
