@@ -1,1 +1,1 @@
-"""HTTP-facing compatibility layer over the frame_repair core."""
+"""FastAPI HTTP layer for the frame repair MVP."""
