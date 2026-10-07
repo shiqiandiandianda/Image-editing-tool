@@ -29,3 +29,27 @@ npm run build
 - `src/api.ts`：后端适配边界和本地安全占位
 - `src/types.ts`：任务/矩形/页面类型
 - `src/styles.css`：工作台视觉样式
+
+
+## FastAPI 本地 API
+
+后端 MVP 使用本地 deterministic adapter，返回可审阅的合成预览元数据，不会伪称已经执行 Codex 图片编辑：
+
+```bash
+uvicorn backend.app.main:app --reload --port 8000
+```
+
+设置 `VITE_API_BASE_URL=http://localhost:8000` 后，前端调用：
+
+- `GET/POST /api/repair/jobs`
+- `GET /api/repair/jobs/:id`
+- `POST /api/repair/jobs/:id/accept`
+- `POST /api/repair/jobs/:id/reject`
+
+创建任务会同步返回 `status=review`、`executionStatus=preview_ready`、`reviewStatus=pending` 和 `preview.origin=deterministic_adapter`（`codexVerified=false`）。接受只记录人工审阅，不会写入正式图片版本；真实 Codex runtime、图片文件产物和合成仍未接入。
+
+后端测试：
+
+```bash
+python -m unittest discover -s backend/tests -v
+```
