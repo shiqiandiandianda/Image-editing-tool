@@ -227,10 +227,11 @@ function App() {
     try {
       const accepted = await repairApi.acceptJob(activeJobId)
       setJobs((previous) => previous.map((item) => item.id === activeJobId ? accepted : item))
-      if (accepted.acceptedVersionId && accepted.pageId) {
+      const acceptedVersionId = accepted.acceptedVersionId
+      if (acceptedVersionId && accepted.pageId) {
         const currentSrc = apiConfigured ? resolveApiUrl(`/api/repair/assets/${accepted.pageId}/current`) : undefined
         setPages((previous) => previous.map((page) => page.id === accepted.pageId || page.imageId === accepted.pageId
-          ? { ...page, versionId: accepted.acceptedVersionId, ...(currentSrc ? { src: currentSrc } : {}) }
+          ? { ...page, versionId: acceptedVersionId, ...(currentSrc ? { src: currentSrc } : {}) }
           : page))
       }
       setNotice('已接受预览，正式版本已由后端记录')
