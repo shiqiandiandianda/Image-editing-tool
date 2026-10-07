@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Annotated, Literal
+
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 PositiveInt = Annotated[int, Field(gt=0)]
