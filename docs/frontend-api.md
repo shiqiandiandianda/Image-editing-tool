@@ -1,6 +1,6 @@
 # 前端 API 契约
 
-前端通过 `VITE_API_BASE_URL` 选择后端模式；未配置时使用本地 deterministic adapter，仅用于界面联调，不代表 Codex 已执行。
+前端默认连接 `http://127.0.0.1:8000`；设置 `VITE_API_BASE_URL=local` 或 `mock` 才使用浏览器内存适配器。后端接口返回的 `codexVerified` 才是实际 Codex 执行状态。
 
 ## 图片上传
 

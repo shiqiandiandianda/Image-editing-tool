@@ -18,9 +18,9 @@ npm run build
 
 ## 运行模式
 
-- 未设置 `VITE_API_BASE_URL` 时使用浏览器内存适配器，提交任务会明确显示“本地演示任务”，不会伪称 Codex 已执行。
+- 前端默认连接 `http://127.0.0.1:8000`；只有把 `VITE_API_BASE_URL=local` 或 `mock` 时才使用浏览器内存适配器。
 - 设置 `VITE_API_BASE_URL` 后，适配器调用图片上传、任务提交/轮询、预览、接受、拒绝和取消接口；接受预览会通过版本 CAS 保存正式 PNG 和 SQLite 状态。
-- 默认后端使用 deterministic adapter 生成可审阅的本地预览，明确标记 `codexVerified=false`。设置 `FRAME_REPAIR_ADAPTER=codex_cli` 后，上传图片任务会调用 Codex CLI；只有收到并校验真实图片产物时才标记为 Codex 结果。
+- 后端会自动探测本机 Codex CLI；探测到时上传图片任务默认调用 CLI。设置 `FRAME_REPAIR_ADAPTER=deterministic` 可切回本地确定性预览，只有收到并校验真实图片产物时才标记为 Codex 结果。
 - 框坐标以规范化底图像素为世界坐标；拖拽完成后按所选比例量化为整数尺寸。上下文扩边只改变参考矩形，不改变写入矩形。
 
 ## 目录
@@ -33,14 +33,14 @@ npm run build
 
 ## FastAPI 本地 API
 
-后端默认使用本地 deterministic adapter，上传图片后会实际生成 PNG 预览并保存任务状态：
+后端会自动探测 Codex CLI；上传图片后会实际生成 PNG 预览并保存任务状态：
 
 ```powershell
 python -m pip install -e .
 uvicorn backend.app.main:app --reload --port 8000
 ```
 
-启用 Codex CLI：
+显式启用 Codex CLI（也可以依赖自动探测）：
 
 ```powershell
 $env:FRAME_REPAIR_ADAPTER = "codex_cli"

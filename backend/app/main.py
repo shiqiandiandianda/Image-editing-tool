@@ -17,7 +17,7 @@ app.add_middleware(
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["content-type", "idempotency-key", "x-filename"],
 )
-service = RepairService()
+service = RepairService(auto_codex=True)
 
 
 def _service_error(exc: ServiceError) -> HTTPException:

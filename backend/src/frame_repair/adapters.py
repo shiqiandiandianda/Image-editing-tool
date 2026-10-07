@@ -181,6 +181,7 @@ class CodexCliImageEditAdapter:
         return [
             self.executable,
             "exec",
+            prompt,
             "--json",
             "--image",
             str(input_path),
@@ -190,7 +191,6 @@ class CodexCliImageEditAdapter:
             "--ephemeral",
             "-C",
             str(workdir),
-            prompt,
         ]
 
     @staticmethod

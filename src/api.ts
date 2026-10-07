@@ -18,7 +18,9 @@ export interface RepairApi {
   cancelJob(jobId: string): Promise<RepairJob>
 }
 
-const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '')
+const configuredApiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim()
+const useLocalAdapter = configuredApiBase === 'local' || configuredApiBase === 'mock'
+const apiBase = (configuredApiBase && !useLocalAdapter ? configuredApiBase : 'http://127.0.0.1:8000').replace(/\/$/, '')
 const localJobs: RepairJob[] = []
 
 function newId(prefix: string): string {
@@ -143,6 +145,6 @@ const httpAdapter: RepairApi = {
   async cancelJob(jobId) { return requestJson<RepairJob>(`/api/repair/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' }) },
 }
 
-export const repairApi: RepairApi = apiBase ? httpAdapter : localAdapter
-export const isMockAdapter = !apiBase
-export const apiConfigured = Boolean(apiBase)
+export const repairApi: RepairApi = useLocalAdapter ? localAdapter : httpAdapter
+export const isMockAdapter = useLocalAdapter
+export const apiConfigured = !useLocalAdapter

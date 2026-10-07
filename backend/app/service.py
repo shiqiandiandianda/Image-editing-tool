@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import sqlite3
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -93,8 +94,9 @@ class RepairService:
     synchronous worker, preview composition, and compare-and-swap acceptance.
     """
 
-    def __init__(self, adapter=None, *, data_root: str | Path | None = None) -> None:
+    def __init__(self, adapter=None, *, data_root: str | Path | None = None, auto_codex: bool = False) -> None:
         self.adapter = adapter or DeterministicImageEditAdapter()
+        self._image_adapter = self.adapter
         self._jobs: OrderedDict[str, _StoredJob] = OrderedDict()
         self._idempotency: dict[str, tuple[str, str]] = {}
         self._assets: dict[str, UploadedAsset] = {}
@@ -109,10 +111,16 @@ class RepairService:
         self.previews_root.mkdir(parents=True, exist_ok=True)
         self.versions_root.mkdir(parents=True, exist_ok=True)
         self.state_root.mkdir(parents=True, exist_ok=True)
-        self._codex_mode = os.environ.get("FRAME_REPAIR_ADAPTER", "").lower() in {"codex", "codex_cli"}
+        requested_adapter = os.environ.get("FRAME_REPAIR_ADAPTER")
+        executable = os.environ.get("CODEX_EXECUTABLE") or shutil.which("codex")
+        self._codex_mode = (
+            requested_adapter.lower() in {"codex", "codex_cli"}
+            if requested_adapter is not None
+            else auto_codex and bool(executable)
+        )
         if self._codex_mode and adapter is None:
-            self.adapter = CodexCliImageEditAdapter(
-                executable=os.environ.get("CODEX_EXECUTABLE", "codex"),
+            self._image_adapter = CodexCliImageEditAdapter(
+                executable=executable or "codex",
                 work_root=root / "codex-work",
                 timeout_seconds=float(os.environ.get("CODEX_TIMEOUT_SECONDS", "300")),
                 keep_workdirs=os.environ.get("CODEX_KEEP_WORKDIRS", "0") == "1",
@@ -317,8 +325,8 @@ class RepairService:
         try:
             adapter = (
                 DeterministicTestAdapter()
-                if isinstance(self.adapter, DeterministicImageEditAdapter)
-                else self.adapter
+                if isinstance(self._image_adapter, DeterministicImageEditAdapter)
+                else self._image_adapter
             )
             manager = JobManager(versions, adapter)
             target = Rect(payload.target_rect.x, payload.target_rect.y, payload.target_rect.w, payload.target_rect.h)

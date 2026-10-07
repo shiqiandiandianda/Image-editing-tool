@@ -1,6 +1,6 @@
 # Codex CLI 图像编辑探针
 
-后端默认使用 deterministic adapter，保证本地可测试且不会伪称 Codex 结果。设置 `FRAME_REPAIR_ADAPTER=codex_cli` 后，上传图片任务会通过同一个 CLI 适配器执行，预览只有在收到并校验真实图片产物时才标记 `codexVerified=true`。
+后端启动时会自动探测 Codex CLI；探测到时上传图片任务默认通过 CLI 执行。设置 `FRAME_REPAIR_ADAPTER=deterministic` 可切回本地适配器。预览只有在收到并校验真实图片产物时才标记 `codexVerified=true`。
 
 适配器调用以下 CLI 能力：
 
