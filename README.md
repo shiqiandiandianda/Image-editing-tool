@@ -56,6 +56,20 @@ uvicorn backend.app.main:app --reload --port 8000
 
 创建上传图片任务会同步执行串行 worker，返回 `status=review`、`executionStatus=preview_ready`、`reviewStatus=pending` 和预览 URL。未上传 `imageId` 的内置示例页仍走元数据兼容路径。
 
+### 本地部署 Codex CLI
+
+Windows PowerShell 中按官方 npm 方式安装并验证：
+
+```powershell
+npm install -g @openai/codex@latest
+where.exe codex
+codex --version
+codex login status
+codex doctor --summary --no-color
+```
+
+`where.exe codex` 应优先显示 `%APPDATA%\npm\codex.cmd`。如果系统中同时存在桌面版内置 CLI，先确认终端实际解析到 npm 全局 CLI，再启动后端。登录只需执行一次 `codex login`；不要把认证文件或令牌写入仓库。
+
 后端测试：
 
 ```bash
