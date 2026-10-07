@@ -9,7 +9,7 @@ from threading import RLock
 from uuid import uuid4
 
 from .adapter import DeterministicImageEditAdapter, DeterministicPreview
-from .api_models import PreviewInfo, RectPayload, RepairJobResponse, RepairSubmissionPayload
+from .api_models import PreviewInfo, RepairJobResponse, RepairSubmissionPayload
 
 
 class ServiceError(Exception):
@@ -60,7 +60,11 @@ class RepairService:
     @staticmethod
     def _hash_payload(payload: RepairSubmissionPayload) -> str:
         # by_alias keeps this stable with the browser wire contract.
-        encoded = json.dumps(payload.model_dump(by_alias=True, exclude_none=True), sort_keys=True, separators=(",", ":"))
+        encoded = json.dumps(
+            payload.model_dump(by_alias=True, exclude_none=True),
+            sort_keys=True,
+            separators=(",", ":"),
+        )
         return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
     @staticmethod
@@ -70,7 +74,12 @@ class RepairService:
         rw, rh = (int(part) for part in payload.target_ratio.split(":"))
         if target.w * rh != target.h * rw:
             raise InvalidRepair(f"targetRect must match ratio {payload.target_ratio}")
-        if context.x > target.x or context.y > target.y or context.right < target.right or context.bottom < target.bottom:
+        if (
+            context.x > target.x
+            or context.y > target.y
+            or context.right < target.right
+            or context.bottom < target.bottom
+        ):
             raise InvalidRepair("contextRect must contain targetRect")
         if payload.context_expansion_enabled:
             if payload.context_margin_px < 0:
@@ -82,7 +91,12 @@ class RepairService:
     def _public_status(review_status: str) -> str:
         return {"pending": "review", "accepted": "accepted", "rejected": "rejected"}[review_status]
 
-    def submit(self, payload: RepairSubmissionPayload, *, header_idempotency_key: str | None = None) -> RepairJobResponse:
+    def submit(
+        self,
+        payload: RepairSubmissionPayload,
+        *,
+        header_idempotency_key: str | None = None,
+    ) -> RepairJobResponse:
         self._validate_geometry(payload)
         request_hash = self._hash_payload(payload)
         key = header_idempotency_key or payload.idempotency_key or f"request-{request_hash}"
@@ -91,7 +105,9 @@ class RepairService:
             if existing:
                 existing_job_id, existing_hash = existing
                 if existing_hash != request_hash:
-                    raise IdempotencyConflict("Idempotency-Key was already used for a different request")
+                    raise IdempotencyConflict(
+                        "Idempotency-Key was already used for a different request"
+                    )
                 return self._jobs[existing_job_id].response
 
             job_id = f"repair-{uuid4().hex}"
@@ -133,7 +149,11 @@ class RepairService:
 
     def list(self, *, include_rejected: bool = False) -> list[RepairJobResponse]:
         with self._lock:
-            return [entry.response for entry in self._jobs.values() if include_rejected or entry.response.review_status != "rejected"]
+            return [
+                entry.response
+                for entry in self._jobs.values()
+                if include_rejected or entry.response.review_status != "rejected"
+            ]
 
     def get(self, job_id: str) -> RepairJobResponse:
         with self._lock:
