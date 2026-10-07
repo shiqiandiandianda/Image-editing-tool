@@ -98,6 +98,16 @@ class JobManager:
         }
         request_hash = hashlib.sha256(json.dumps(request, sort_keys=True).encode()).hexdigest()
         with self._lock:
+            existing_job = self._jobs.get(job_id)
+            if existing_job is not None:
+                if (
+                    existing_job.idempotency_key != idempotency_key
+                    or existing_job.request_hash != request_hash
+                ):
+                    raise IdempotencyConflict(
+                        "job id was already used for a different request"
+                    )
+                return existing_job
             existing_id = self._by_idempotency.get(idempotency_key)
             if existing_id is not None:
                 existing = self._jobs[existing_id]

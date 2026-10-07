@@ -11,6 +11,7 @@ dependencies = [
   "fastapi>=0.115,<1",
   "pydantic>=2.8,<3",
   "pillow>=10,<13",
+  "python-multipart>=0.0.9,<1",
 ]
 
 [project.optional-dependencies]

@@ -1,30 +1,63 @@
-# Image-editing-tool
+# 画框框 · 局部返修工作台
 
-## 目标
+React + TypeScript + Vite + react-konva 的前端 MVP。当前实现覆盖单张图片载入、三种目标比例框选、默认关闭的上下文扩边、返修说明、任务状态与预览审阅操作。
 
-为局部图片返修提供可审阅、可回退的后端闭环：冻结正式底图，校验目标框比例，按需生成上下文参考裁图，接收一个图像编辑结果，合成原位预览，并在人工接受后保存新版本。
+## 开发
 
-## 已实现功能
-
-- 目标框比例 `1:1`、`16:9`、`9:16` 的整数几何校验；比例不符会拒绝。
-- 上下文扩边配置，默认关闭；扩边只影响模型参考裁图，写回范围仍是原目标框。
-- 冻结底图版本与像素哈希；原图快照只读，接受前后做版本冲突检查。
-- 持久化模型所需的任务状态、幂等键、输入哈希、结果校验、预览、接受、拒绝和取消语义。
-- 首版串行任务运行器（并发上限默认 1）与可替换图像编辑适配器；未配置真实 Codex 时明确返回阻塞。
-- 确定性裁切、等比例缩放、目标框合成和框外像素不变校验。
-
-## 部署方法
-
-需要 Python 3.11+。开发期可直接运行标准库测试：
-
-```powershell
-python -m unittest discover -s backend/tests -v
+```bash
+npm install --cache /tmp/npm-cache
+npm run dev
 ```
 
-真实图片编解码和 API 运行时依赖在 `backend/pyproject.toml` 中声明；Codex 原生运行时、认证和专用 RPC 尚未在本仓库中配置。请先安装锁定的依赖，再按 `docs/development-log.md` 的验证级别逐项启用。
+生产构建与类型检查：
 
-## 感谢与参考项目
+```bash
+npm run typecheck
+npm run build
+```
 
-- OpenAI Codex：图像编辑能力与 app-server 协议的研究参考。
-- Pillow：计划用于生产图片编解码和缩放。
-- FastAPI：计划用于 HTTP API 和生命周期管理。
+## 运行模式
+
+- 未设置 `VITE_API_BASE_URL` 时使用浏览器内存适配器，提交任务会明确显示“本地演示任务”，不会伪称 Codex 已执行。
+- 设置 `VITE_API_BASE_URL` 后，适配器调用图片上传、任务提交/轮询、预览、接受、拒绝和取消接口；接受预览会通过版本 CAS 保存正式 PNG 和 SQLite 状态。
+- 默认后端使用 deterministic adapter 生成可审阅的本地预览，明确标记 `codexVerified=false`。设置 `FRAME_REPAIR_ADAPTER=codex_cli` 后，上传图片任务会调用 Codex CLI；只有收到并校验真实图片产物时才标记为 Codex 结果。
+- 框坐标以规范化底图像素为世界坐标；拖拽完成后按所选比例量化为整数尺寸。上下文扩边只改变参考矩形，不改变写入矩形。
+
+## 目录
+
+- `src/main.tsx`：画布、标注与面板交互
+- `src/api.ts`：后端适配边界和本地安全占位
+- `src/types.ts`：任务/矩形/页面类型
+- `src/styles.css`：工作台视觉样式
+
+
+## FastAPI 本地 API
+
+后端默认使用本地 deterministic adapter，上传图片后会实际生成 PNG 预览并保存任务状态：
+
+```powershell
+python -m pip install -e .
+uvicorn backend.app.main:app --reload --port 8000
+```
+
+启用 Codex CLI：
+
+```powershell
+$env:FRAME_REPAIR_ADAPTER = "codex_cli"
+uvicorn backend.app.main:app --reload --port 8000
+```
+
+设置 `VITE_API_BASE_URL=http://localhost:8000` 后，前端调用：
+
+- `POST /api/repair/assets`
+- `GET/POST /api/repair/jobs`
+- `GET /api/repair/jobs/:id`、`GET /api/repair/previews/:id`
+- `POST /api/repair/jobs/:id/accept`、`/reject`、`/cancel`
+
+创建上传图片任务会同步执行串行 worker，返回 `status=review`、`executionStatus=preview_ready`、`reviewStatus=pending` 和预览 URL。未上传 `imageId` 的内置示例页仍走元数据兼容路径。
+
+后端测试：
+
+```bash
+python -m unittest discover -s backend/tests -v
+```
