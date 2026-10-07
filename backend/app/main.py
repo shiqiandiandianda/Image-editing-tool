@@ -20,7 +20,10 @@ service = RepairService()
 
 
 def _service_error(exc: ServiceError) -> HTTPException:
-    return HTTPException(status_code=exc.status_code, detail={"code": exc.code, "message": str(exc)})
+    return HTTPException(
+        status_code=exc.status_code,
+        detail={"code": exc.code, "message": str(exc)},
+    )
 
 
 @app.get("/health")
@@ -38,7 +41,9 @@ def validate_geometry(
     expansion_pixels: int = 0,
 ) -> dict[str, object]:
     try:
-        plan = build_crop_plan(target, ratio, image_width, image_height, expand_context, expansion_pixels)
+        plan = build_crop_plan(
+            target, ratio, image_width, image_height, expand_context, expansion_pixels
+        )
     except GeometryError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {"target": plan.target.model_dump(), "context": plan.context.model_dump()}
@@ -86,7 +91,12 @@ def reject_job(job_id: str) -> RepairJobResponse:
 
 # Canonical aliases from the technical plan. The browser MVP uses the plural
 # `/api/repair/jobs` routes above; aliases make the boundary easy to evolve.
-@app.post("/api/repair-jobs", response_model=RepairJobResponse, status_code=201, include_in_schema=False)
+@app.post(
+    "/api/repair-jobs",
+    response_model=RepairJobResponse,
+    status_code=201,
+    include_in_schema=False,
+)
 def create_job_alias(
     payload: RepairSubmissionPayload,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
@@ -99,7 +109,11 @@ def read_job_alias(job_id: str) -> RepairJobResponse:
     return read_job(job_id)
 
 
-@app.post("/api/repair-jobs/{job_id}/review", response_model=RepairJobResponse, include_in_schema=False)
+@app.post(
+    "/api/repair-jobs/{job_id}/review",
+    response_model=RepairJobResponse,
+    include_in_schema=False,
+)
 def review_job_alias(job_id: str, decision: ReviewDecision) -> RepairJobResponse:
     try:
         return service.accept(job_id) if decision.decision == "accept" else service.reject(job_id)
