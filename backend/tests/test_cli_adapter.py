@@ -119,6 +119,8 @@ class CodexCliAdapterTests(unittest.TestCase):
             self.assertTrue(any("repair the selected frame" in value for value in command))
             self.assertLess(command.index(next(value for value in command if "repair the selected frame" in value)), command.index("--image"))
             self.assertEqual(runner.kwargs["timeout"], 7.5)
+            self.assertEqual(runner.kwargs["encoding"], "utf-8")
+            self.assertEqual(runner.kwargs["errors"], "replace")
             task_dir = Path(runner.kwargs["cwd"])
             self.assertEqual(task_dir.parent, root)
             self.assertTrue(task_dir.name.startswith("job-42-"))
