@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Annotated, Literal
-from uuid import UUID
-
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 PositiveInt = Annotated[int, Field(gt=0)]
@@ -49,7 +47,9 @@ class RepairSubmissionPayload(BaseModel):
     issue_text: str = Field(alias="issueText", min_length=1, max_length=4000)
     instruction: str = Field(min_length=1, max_length=4000)
     preserve_text: str = Field(alias="preserveText", default="", max_length=4000)
-    idempotency_key: str | None = Field(alias="idempotencyKey", default=None, min_length=1, max_length=256)
+    idempotency_key: str | None = Field(
+        alias="idempotencyKey", default=None, min_length=1, max_length=256
+    )
 
 
 class PreviewInfo(BaseModel):
@@ -72,7 +72,9 @@ class RepairJobResponse(BaseModel):
     id: str
     annotation_id: str = Field(alias="annotationId")
     status: Literal["queued", "running", "review", "accepted", "failed", "rejected"]
-    execution_status: Literal["queued", "running", "preview_ready", "failed", "cancelled"] = Field(alias="executionStatus")
+    execution_status: Literal[
+        "queued", "running", "preview_ready", "failed", "cancelled"
+    ] = Field(alias="executionStatus")
     review_status: Literal["pending", "accepted", "rejected"] = Field(alias="reviewStatus")
     ratio: Literal["1:1", "16:9", "9:16"]
     target_rect: RectPayload = Field(alias="targetRect")
