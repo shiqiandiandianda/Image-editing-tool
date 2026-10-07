@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Image as KonvaImage, Layer, Line, Rect as KonvaRect, Stage, Text as KonvaText } from 'react-konva'
 import type Konva from 'konva'
 import './styles.css'
-import { isMockAdapter, repairApi } from './api'
-import type { PageAsset, Ratio, Rect, RepairJob, RepairSubmission } from './types'
+import { apiConfigured, isMockAdapter, repairApi, resolveApiUrl } from './api'
+import type { PageAsset, Ratio, Rect, RepairJob, RepairSubmission, UploadedAsset } from './types'
 
 const ratioOptions: Array<{ value: Ratio; label: string; hint: string }> = [
   { value: '1:1', label: '1 : 1', hint: '正方形' },
@@ -92,6 +92,8 @@ function App() {
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 580 })
   const fileInputRef = useRef<HTMLInputElement>(null)
   const activePage = pages.find((page) => page.id === activePageId) ?? pages[0]
+  const activeJob = jobs.find((job) => job.id === activeJobId)
+  const activePreviewUrl = resolveApiUrl(activeJob?.preview?.previewUrl ?? activeJob?.preview?.artifactUrl)
   const image = useImage(activePage?.src ?? null)
   const contextRect = useMemo(() => expandRect(targetRect, contextEnabled ? contextMargin : 0, activePage?.width ?? 1, activePage?.height ?? 1), [targetRect, contextEnabled, contextMargin, activePage])
   const scale = useMemo(() => Math.min((canvasSize.width - 40) / (activePage?.width ?? 1), (canvasSize.height - 40) / (activePage?.height ?? 1)), [canvasSize, activePage])
@@ -111,6 +113,28 @@ function App() {
   useEffect(() => {
     repairApi.listJobs().then(setJobs).catch(() => undefined)
   }, [])
+
+  // A real worker may finish after the POST response. Poll only the selected
+  // job and stop once it reaches a terminal execution/review state.
+  useEffect(() => {
+    if (!activeJobId || isMockAdapter) return
+    let cancelled = false
+    let timer: number | undefined
+    const poll = async () => {
+      try {
+        const latest = await repairApi.getJob(activeJobId)
+        if (cancelled) return
+        setJobs((previous) => previous.map((item) => item.id === latest.id ? latest : item))
+        if (latest.executionStatus === 'queued' || latest.executionStatus === 'running') {
+          timer = window.setTimeout(poll, 1500)
+        }
+      } catch {
+        if (!cancelled) timer = window.setTimeout(poll, 2500)
+      }
+    }
+    void poll()
+    return () => { cancelled = true; if (timer !== undefined) window.clearTimeout(timer) }
+  }, [activeJobId])
 
   const toWorld = useCallback((event: Konva.KonvaEventObject<MouseEvent>) => {
     const stage = event.target.getStage()
@@ -148,12 +172,33 @@ function App() {
     setTargetRect((rect) => ({ ...rect, x: Math.round(x), y: Math.round(y) }))
   }
 
-  const onFile = (file: File) => {
+  const onFile = async (file: File) => {
     if (!file.type.startsWith('image/')) { setNotice('请选择 PNG、JPEG 或 WebP 图片'); return }
     const src = URL.createObjectURL(file)
     const probe = new window.Image()
-    probe.onload = () => {
-      const page: PageAsset = { id: `page-${crypto.randomUUID()}`, name: file.name, width: probe.naturalWidth, height: probe.naturalHeight, src, status: 'ready' }
+    probe.onload = async () => {
+      let uploaded: UploadedAsset
+      try {
+        setNotice(`正在上传 ${file.name}…`)
+        uploaded = await repairApi.uploadImage(file)
+      } catch (error) {
+        URL.revokeObjectURL(src)
+        setNotice(error instanceof Error ? error.message : '图片上传失败')
+        return
+      }
+      const displaySrc = resolveApiUrl(uploaded.src ?? uploaded.url) ?? src
+      if (displaySrc !== src) URL.revokeObjectURL(src)
+      const page: PageAsset = {
+        id: uploaded.id,
+        imageId: uploaded.id,
+        versionId: uploaded.versionId,
+        sha256: uploaded.sha256,
+        name: uploaded.name || file.name,
+        width: uploaded.width || probe.naturalWidth,
+        height: uploaded.height || probe.naturalHeight,
+        src: displaySrc,
+        status: 'ready',
+      }
       setPages((previous) => [...previous, page])
       setActivePageId(page.id)
       setTargetRect({ x: Math.round(page.width * 0.3), y: Math.round(page.height * 0.3), w: Math.max(24, Math.round(Math.min(page.width, page.height) * 0.2)), h: Math.max(24, Math.round(Math.min(page.width, page.height) * 0.2)) })
@@ -166,7 +211,7 @@ function App() {
     if (!issueText.trim() || !instruction.trim()) { setNotice('请填写问题说明和修改要求后再提交'); return }
     setIsSubmitting(true)
     setNotice(null)
-    const payload: RepairSubmission = { pageId: activePage.id, baseVersionId: 'local-current', targetRatio: ratio, targetRect, contextExpansionEnabled: contextEnabled, contextMarginPx: contextEnabled ? contextMargin : 0, contextRect, issueText: issueText.trim(), instruction: instruction.trim(), preserveText: preserveText.trim() }
+    const payload: RepairSubmission = { pageId: activePage.id, imageId: activePage.imageId, baseVersionId: activePage.versionId ?? 'local-current', targetRatio: ratio, targetRect, contextExpansionEnabled: contextEnabled, contextMarginPx: contextEnabled ? contextMargin : 0, contextRect, issueText: issueText.trim(), instruction: instruction.trim(), preserveText: preserveText.trim() }
     try {
       const job = await repairApi.submitRepair(payload)
       setJobs((previous) => [job, ...previous.filter((item) => item.id !== job.id)])
@@ -179,16 +224,28 @@ function App() {
 
   const accept = async () => {
     if (!activeJobId) return
-    await repairApi.acceptJob(activeJobId)
-    setJobs((previous) => previous.map((item) => item.id === activeJobId ? { ...item, status: 'accepted' } : item))
-    setNotice('已接受预览（正式合成接口仍由后端负责）')
+    try {
+      const accepted = await repairApi.acceptJob(activeJobId)
+      setJobs((previous) => previous.map((item) => item.id === activeJobId ? accepted : item))
+      if (accepted.acceptedVersionId && accepted.pageId) {
+        const currentSrc = apiConfigured ? resolveApiUrl(`/api/repair/assets/${accepted.pageId}/current`) : undefined
+        setPages((previous) => previous.map((page) => page.id === accepted.pageId || page.imageId === accepted.pageId
+          ? { ...page, versionId: accepted.acceptedVersionId, ...(currentSrc ? { src: currentSrc } : {}) }
+          : page))
+      }
+      setNotice('已接受预览，正式版本已由后端记录')
+    } catch (error) { setNotice(error instanceof Error ? error.message : '接受失败') }
   }
   const reject = async () => {
     if (!activeJobId) return
-    await repairApi.rejectJob(activeJobId)
-    setJobs((previous) => previous.filter((item) => item.id !== activeJobId))
-    setActiveJobId(null)
-    setNotice('已撤销当前预览')
+    try {
+      const current = jobs.find((item) => item.id === activeJobId)
+      const rejected = current?.executionStatus === 'queued' || current?.executionStatus === 'running'
+        ? await repairApi.cancelJob(activeJobId)
+        : await repairApi.rejectJob(activeJobId)
+      setJobs((previous) => previous.map((item) => item.id === activeJobId ? rejected : item))
+      setNotice(rejected.status === 'cancelled' ? '已取消任务' : '已撤销当前预览')
+    } catch (error) { setNotice(error instanceof Error ? error.message : '撤销失败') }
   }
   const exportPage = () => {
     if (!image) return
@@ -230,8 +287,12 @@ function App() {
         <section className="panel-section form-section"><label className="section-label" htmlFor="issue">问题说明 <em>*</em></label><textarea id="issue" value={issueText} onChange={(event) => setIssueText(event.target.value)} placeholder="例如：右手手指结构异常" rows={3} /><label className="section-label" htmlFor="instruction">修改要求 <em>*</em></label><textarea id="instruction" value={instruction} onChange={(event) => setInstruction(event.target.value)} placeholder="描述希望如何修改" rows={3} /><label className="section-label" htmlFor="preserve">必须保留</label><textarea id="preserve" value={preserveText} onChange={(event) => setPreserveText(event.target.value)} rows={2} /></section>
         <div className="submit-area"><button className="primary-button" onClick={submit} disabled={isSubmitting}>{isSubmitting ? '提交中…' : '提交返修任务'} <span>⌘ ↵</span></button><p>提交后将冻结当前底图版本，生成结果需人工接受后才会应用。</p></div>
         {notice && <div className="notice" role="status">{notice}</div>}
-        <section className="panel-section jobs-section"><div className="jobs-heading"><label className="section-label">任务状态</label><span>{jobs.length} 个任务</span></div>{jobs.length === 0 ? <div className="empty-jobs">提交后，任务会出现在这里</div> : <div className="jobs-list">{jobs.slice(0, 4).map((job) => <button className={`job-row ${job.id === activeJobId ? 'active' : ''}`} key={job.id} onClick={() => setActiveJobId(job.id)}><span className={`job-dot ${job.status}`} /><div><b>{job.issueText || '未命名修复'}</b><small>{job.ratio} · {new Date(job.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small></div><span className="job-status">{({ queued: '排队', running: '执行中', review: '待审阅', accepted: '已接受', failed: '失败' } as Record<string, string>)[job.status]}</span></button>)}</div>}</section>
-        <div className="review-actions"><button className="secondary-button" disabled={!activeJobId} onClick={reject}>撤销</button><button className="secondary-button" disabled={!activeJobId} onClick={accept}>接受预览</button><button className="export-button" onClick={exportPage}>导出 PNG ↗</button></div>
+        {activePreviewUrl && activeJob?.preview?.available && <div className="preview-card">
+          <div className="jobs-heading"><label className="section-label">生成预览</label><span>{activeJob.preview.codexVerified ? 'Codex' : activeJob.preview.provider}</span></div>
+          <img src={activePreviewUrl} alt="返修结果预览" />
+        </div>}
+        <section className="panel-section jobs-section"><div className="jobs-heading"><label className="section-label">任务状态</label><span>{jobs.length} 个任务</span></div>{jobs.length === 0 ? <div className="empty-jobs">提交后，任务会出现在这里</div> : <div className="jobs-list">{jobs.slice(0, 4).map((job) => <button className={`job-row ${job.id === activeJobId ? 'active' : ''}`} key={job.id} onClick={() => setActiveJobId(job.id)}><span className={`job-dot ${job.status}`} /><div><b>{job.issueText || '未命名修复'}</b><small>{job.ratio} · {new Date(job.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small></div><span className="job-status">{({ queued: '排队', running: '执行中', review: '待审阅', accepted: '已接受', failed: '失败', rejected: '已撤销', cancelled: '已取消', interrupted: '中断', version_conflict: '版本冲突' } as Record<string, string>)[job.status]}</span></button>)}</div>}</section>
+        <div className="review-actions"><button className="secondary-button" disabled={!activeJobId || activeJob?.status === 'accepted' || activeJob?.status === 'rejected' || activeJob?.status === 'cancelled'} onClick={reject}>撤销</button><button className="secondary-button" disabled={!activeJobId || activeJob?.status !== 'review' || (!isMockAdapter && !activeJob?.preview?.available)} onClick={accept}>接受预览</button><button className="export-button" onClick={exportPage}>导出 PNG ↗</button></div>
       </aside>
     </div>
   </div>

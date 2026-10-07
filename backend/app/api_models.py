@@ -39,6 +39,7 @@ class RepairSubmissionPayload(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     page_id: str = Field(alias="pageId", min_length=1, max_length=256)
+    image_id: str | None = Field(alias="imageId", default=None, min_length=1, max_length=256)
     base_version_id: str = Field(alias="baseVersionId", min_length=1, max_length=256)
     target_ratio: Literal["1:1", "16:9", "9:16"] = Field(alias="targetRatio")
     target_rect: RectPayload = Field(alias="targetRect")
@@ -58,13 +59,17 @@ class PreviewInfo(BaseModel):
 
     state: Literal["ready"] = "ready"
     available: bool = True
-    origin: Literal["deterministic_adapter"] = "deterministic_adapter"
-    provider: Literal["local-deterministic"] = "local-deterministic"
+    # The adapter is deliberately reported as data from the backend.  The
+    # first MVP only used the deterministic adapter, while uploaded pages can
+    # now be executed by the Codex CLI adapter as well.
+    origin: str = "deterministic_adapter"
+    provider: str = "local-deterministic"
     codex_verified: bool = Field(False, alias="codexVerified")
     applied: bool = False
     message: str = "Synthetic deterministic preview; no Codex image edit was executed."
     target_size: tuple[int, int] = Field(alias="targetSize")
     context_size: tuple[int, int] = Field(alias="contextSize")
+    preview_url: str | None = Field(default=None, alias="previewUrl")
 
 
 class RepairJobResponse(BaseModel):
@@ -72,9 +77,24 @@ class RepairJobResponse(BaseModel):
 
     id: str
     annotation_id: str = Field(alias="annotationId")
-    status: Literal["queued", "running", "review", "accepted", "failed", "rejected"]
+    status: Literal[
+        "queued",
+        "running",
+        "review",
+        "accepted",
+        "failed",
+        "rejected",
+        "cancelled",
+        "version_conflict",
+    ]
     execution_status: Literal[
-        "queued", "running", "preview_ready", "failed", "cancelled"
+        "queued",
+        "running",
+        "preview_ready",
+        "failed",
+        "cancelled",
+        "interrupted",
+        "version_conflict",
     ] = Field(alias="executionStatus")
     review_status: Literal["pending", "accepted", "rejected"] = Field(alias="reviewStatus")
     ratio: Literal["1:1", "16:9", "9:16"]
@@ -84,13 +104,15 @@ class RepairJobResponse(BaseModel):
     issue_text: str = Field(alias="issueText")
     page_id: str = Field(alias="pageId")
     base_version_id: str = Field(alias="baseVersionId")
-    adapter: Literal["deterministic_adapter"]
+    adapter: str
     preview: PreviewInfo | None = None
     accepted_at: datetime | None = Field(default=None, alias="acceptedAt")
     rejected_at: datetime | None = Field(default=None, alias="rejectedAt")
     error_code: str | None = Field(default=None, alias="errorCode")
     error_message: str | None = Field(default=None, alias="errorMessage")
     idempotency_key: str = Field(alias="idempotencyKey")
+    accepted_version_id: str | None = Field(default=None, alias="acceptedVersionId")
+    preview_url: str | None = Field(default=None, alias="previewUrl")
 
 
 class ReviewDecision(BaseModel):

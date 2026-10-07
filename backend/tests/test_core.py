@@ -82,6 +82,8 @@ class CoreTests(unittest.TestCase):
         self.assertIs(manager.submit(**kwargs), first)
         with self.assertRaises(IdempotencyConflict):
             manager.submit(**{**kwargs, "job_id": "j2", "instruction": "different"})
+        with self.assertRaises(IdempotencyConflict):
+            manager.submit(**{**kwargs, "idempotency_key": "other"})
 
     def test_serial_run_preview_accept_keeps_outside_pixels(self):
         adapter = DeterministicTestAdapter(lambda raster: raster.resize_nearest(11, 11))

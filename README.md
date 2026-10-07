@@ -16,11 +16,11 @@ npm run typecheck
 npm run build
 ```
 
-## 当前边界
+## 运行模式
 
 - 未设置 `VITE_API_BASE_URL` 时使用浏览器内存适配器，提交任务会明确显示“本地演示任务”，不会伪称 Codex 已执行。
-- 设置 `VITE_API_BASE_URL` 后，适配器调用预留的 `/api/repair/jobs`、`POST /api/repair/jobs/:id/accept` 和 `POST /api/repair/jobs/:id/reject`；字段采用技术方案里的 `frameRepair` 任务快照命名。
-- “接受预览”和“导出 PNG”目前只更新前端状态/导出当前底图，正式版本合成仍等待 FastAPI Worker 和 Codex RPC 接入。
+- 设置 `VITE_API_BASE_URL` 后，适配器调用图片上传、任务提交/轮询、预览、接受、拒绝和取消接口；接受预览会通过版本 CAS 保存正式 PNG 和 SQLite 状态。
+- 默认后端使用 deterministic adapter 生成可审阅的本地预览，明确标记 `codexVerified=false`。设置 `FRAME_REPAIR_ADAPTER=codex_cli` 后，上传图片任务会调用 Codex CLI；只有收到并校验真实图片产物时才标记为 Codex 结果。
 - 框坐标以规范化底图像素为世界坐标；拖拽完成后按所选比例量化为整数尺寸。上下文扩边只改变参考矩形，不改变写入矩形。
 
 ## 目录
@@ -33,20 +33,28 @@ npm run build
 
 ## FastAPI 本地 API
 
-后端 MVP 使用本地 deterministic adapter，返回可审阅的合成预览元数据，不会伪称已经执行 Codex 图片编辑：
+后端默认使用本地 deterministic adapter，上传图片后会实际生成 PNG 预览并保存任务状态：
 
-```bash
+```powershell
+python -m pip install -e .
+uvicorn backend.app.main:app --reload --port 8000
+```
+
+启用 Codex CLI：
+
+```powershell
+$env:FRAME_REPAIR_ADAPTER = "codex_cli"
 uvicorn backend.app.main:app --reload --port 8000
 ```
 
 设置 `VITE_API_BASE_URL=http://localhost:8000` 后，前端调用：
 
+- `POST /api/repair/assets`
 - `GET/POST /api/repair/jobs`
-- `GET /api/repair/jobs/:id`
-- `POST /api/repair/jobs/:id/accept`
-- `POST /api/repair/jobs/:id/reject`
+- `GET /api/repair/jobs/:id`、`GET /api/repair/previews/:id`
+- `POST /api/repair/jobs/:id/accept`、`/reject`、`/cancel`
 
-创建任务会同步返回 `status=review`、`executionStatus=preview_ready`、`reviewStatus=pending` 和 `preview.origin=deterministic_adapter`（`codexVerified=false`）。接受只记录人工审阅，不会写入正式图片版本；真实 Codex runtime、图片文件产物和合成仍未接入。
+创建上传图片任务会同步执行串行 worker，返回 `status=review`、`executionStatus=preview_ready`、`reviewStatus=pending` 和预览 URL。未上传 `imageId` 的内置示例页仍走元数据兼容路径。
 
 后端测试：
 

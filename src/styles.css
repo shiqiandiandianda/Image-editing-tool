@@ -110,3 +110,12 @@ textarea::placeholder { color: #56637f; }
 .review-actions button { flex: 1; white-space: nowrap; font-size: 10px; }
 .export-button { color: #b4c0e0; border-color: #43558d; }
 @media (max-width: 1250px) { body { min-width: 960px; }.workspace { grid-template-columns: 210px minmax(440px, 1fr) 320px; }.inspector { padding-left: 15px; padding-right: 15px; } }
+
+.preview-card {
+  margin: 12px 16px 0;
+  padding: 10px;
+  border: 1px solid var(--line, #dfe3ef);
+  border-radius: 10px;
+  background: var(--panel, #fff);
+}
+.preview-card img { display: block; width: 100%; max-height: 220px; object-fit: contain; margin-top: 8px; border-radius: 6px; background: #f4f6fb; }

@@ -10,8 +10,10 @@ from __future__ import annotations
 import json
 import sqlite3
 from pathlib import Path
+from threading import RLock
 
 from .jobs import Job
+from .errors import PersistenceConflict
 from .raster import Raster
 from .versions import ImageVersion
 
@@ -31,8 +33,9 @@ class SQLiteStateStore:
     """Transactional storage for immutable versions and resumable job state."""
 
     def __init__(self, path: str | Path = ":memory:") -> None:
-        self.connection = sqlite3.connect(path)
+        self.connection = sqlite3.connect(path, check_same_thread=False)
         self.connection.row_factory = sqlite3.Row
+        self._lock = RLock()
         self.initialize()
 
     def initialize(self) -> None:
@@ -63,25 +66,54 @@ class SQLiteStateStore:
         self.connection.commit()
 
     def save_version(self, version: ImageVersion, *, current: bool = False) -> None:
-        with self.connection:
+        if version.content_hash != version.raster.sha256:
+            raise PersistenceConflict("version content hash does not match raster")
+        payload = _raster_payload(version.raster)
+        with self._lock, self.connection:
+            existing = self.connection.execute(
+                "SELECT content_hash, raster_json, parent_version_id, source_job_id, is_current "
+                "FROM image_versions WHERE version_id = ?",
+                (version.version_id,),
+            ).fetchone()
+            if existing is not None:
+                immutable = (
+                    existing["content_hash"],
+                    existing["raster_json"],
+                    existing["parent_version_id"],
+                    existing["source_job_id"],
+                )
+                expected = (
+                    version.content_hash,
+                    payload,
+                    version.parent_version_id,
+                    version.source_job_id,
+                )
+                if immutable != expected:
+                    raise PersistenceConflict(
+                        f"version {version.version_id} is immutable and cannot be replaced"
+                    )
+            else:
+                self.connection.execute(
+                    """INSERT INTO image_versions(
+                        version_id, content_hash, raster_json, parent_version_id,
+                        source_job_id, is_current
+                    ) VALUES (?, ?, ?, ?, ?, 0)""",
+                    (
+                        version.version_id,
+                        version.content_hash,
+                        payload,
+                        version.parent_version_id,
+                        version.source_job_id,
+                    ),
+                )
             if current:
                 self.connection.execute(
                     "UPDATE image_versions SET is_current = 0 WHERE is_current = 1"
                 )
-            self.connection.execute(
-                """INSERT OR REPLACE INTO image_versions(
-                    version_id, content_hash, raster_json, parent_version_id,
-                    source_job_id, is_current
-                ) VALUES (?, ?, ?, ?, ?, ?)""",
-                (
-                    version.version_id,
-                    version.content_hash,
-                    _raster_payload(version.raster),
-                    version.parent_version_id,
-                    version.source_job_id,
-                    int(current),
-                ),
-            )
+                self.connection.execute(
+                    "UPDATE image_versions SET is_current = 1 WHERE version_id = ?",
+                    (version.version_id,),
+                )
 
     def load_version(self, version_id: str) -> ImageVersion:
         row = self.connection.execute(
@@ -113,24 +145,66 @@ class SQLiteStateStore:
             "preserve": job.preserve,
             "preview": _raster_payload(job.preview) if job.preview else None,
             "accepted_version_id": job.accepted_version_id,
+            "artifact_origin": job.artifact.origin if job.artifact else None,
+            "provider_operation_id": (
+                job.artifact.provider_operation_id if job.artifact else None
+            ),
         }
-        with self.connection:
-            self.connection.execute(
-                """INSERT OR REPLACE INTO jobs(
-                    job_id, idempotency_key, request_hash, status, payload_json,
-                    error_code, error_message, attempts
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    job.job_id,
-                    job.idempotency_key,
-                    job.request_hash,
-                    job.status.value,
-                    json.dumps(payload),
-                    job.error_code,
-                    job.error_message,
-                    job.attempts,
-                ),
-            )
+        payload_json = json.dumps(payload, separators=(",", ":"))
+        values = (
+            job.job_id,
+            job.idempotency_key,
+            job.request_hash,
+            job.status.value,
+            payload_json,
+            job.error_code,
+            job.error_message,
+            job.attempts,
+        )
+        with self._lock, self.connection:
+            existing_job = self.connection.execute(
+                "SELECT idempotency_key, request_hash FROM jobs WHERE job_id = ?",
+                (job.job_id,),
+            ).fetchone()
+            existing_key = self.connection.execute(
+                "SELECT job_id, request_hash FROM jobs WHERE idempotency_key = ?",
+                (job.idempotency_key,),
+            ).fetchone()
+            if existing_job is not None and (
+                existing_job["idempotency_key"] != job.idempotency_key
+                or existing_job["request_hash"] != job.request_hash
+            ):
+                raise PersistenceConflict(
+                    f"job {job.job_id} already exists with different request identity"
+                )
+            if existing_key is not None and (
+                existing_key["job_id"] != job.job_id
+                or existing_key["request_hash"] != job.request_hash
+            ):
+                raise PersistenceConflict(
+                    f"idempotency key {job.idempotency_key} is already bound to another request"
+                )
+            if existing_job is None:
+                self.connection.execute(
+                    """INSERT INTO jobs(
+                        job_id, idempotency_key, request_hash, status, payload_json,
+                        error_code, error_message, attempts
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    values,
+                )
+            else:
+                self.connection.execute(
+                    """UPDATE jobs SET status = ?, payload_json = ?, error_code = ?,
+                        error_message = ?, attempts = ? WHERE job_id = ?""",
+                    (
+                        job.status.value,
+                        payload_json,
+                        job.error_code,
+                        job.error_message,
+                        job.attempts,
+                        job.job_id,
+                    ),
+                )
 
     def get_job_record(self, job_id: str) -> dict[str, object]:
         row = self.connection.execute(

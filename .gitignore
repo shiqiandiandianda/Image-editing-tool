@@ -7,3 +7,5 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 .venv/
+.frame-repair-data/
+*.tsbuildinfo
