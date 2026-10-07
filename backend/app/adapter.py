@@ -24,7 +24,14 @@ class DeterministicImageEditAdapter:
 
     calls: int = 0
 
-    def edit(self, *, target_size: tuple[int, int], context_size: tuple[int, int], instruction: str, job_id: str) -> DeterministicPreview:
+    def edit(
+        self,
+        *,
+        target_size: tuple[int, int],
+        context_size: tuple[int, int],
+        instruction: str,
+        job_id: str,
+    ) -> DeterministicPreview:
         if not instruction.strip():
             raise ValueError("instruction cannot be empty")
         self.calls += 1
